@@ -1,4 +1,4 @@
-import { parseDocument } from "yaml";
+import { isMap, isScalar, parseDocument } from "yaml";
 
 import type {
   ParseSkillOptions,
@@ -51,8 +51,8 @@ export function parseSkillContent(
     return { ok: false, body: source, issues };
   }
 
-  const end = normalized.indexOf("\n---", 4);
-  if (end === -1 || !/^\n---(?:\n|$)/u.test(normalized.slice(end))) {
+  const closing = /^---(?:\n|$)/gmu.exec(normalized.slice(4));
+  if (closing === null) {
     issue(
       issues,
       "invalid-frontmatter",
@@ -63,6 +63,7 @@ export function parseSkillContent(
     return { ok: false, body: source, issues };
   }
 
+  const end = 4 + closing.index;
   const header = normalized.slice(4, end);
   const bodyStart = end + (normalized.startsWith("\n---\n", end) ? 5 : 4);
   const body = normalized.slice(bodyStart);
@@ -73,6 +74,21 @@ export function parseSkillContent(
       throw document.errors[0];
     }
     value = document.toJS({ maxAliasCount: 50 });
+    const metadataNode = document.get("metadata", true);
+    if (
+      isMap(metadataNode) &&
+      metadataNode.items.some(
+        (pair) => !isScalar(pair.key) || typeof pair.key.value !== "string",
+      )
+    ) {
+      issue(
+        issues,
+        "invalid-metadata",
+        "error",
+        "metadata keys must be strings",
+        options.path,
+      );
+    }
   } catch (error) {
     issue(
       issues,
@@ -148,7 +164,10 @@ export function formatSkillIndex(
   const entries = buildSkillIndex(resolution);
   if (format === "markdown") {
     return entries
-      .map((entry) => `- **${entry.name}**: ${entry.description}`)
+      .map(
+        (entry) =>
+          `- **${entry.name}**: ${escapeMarkdownInline(entry.description)}`,
+      )
       .join("\n");
   }
   const body = entries
@@ -163,7 +182,7 @@ export function formatSkillIndex(
 export function formatSkillPrompt(skill: ResolvedSkill): string {
   return [
     `<skill name="${escapeXml(skill.metadata.name)}">`,
-    skill.body.trim(),
+    escapeXml(skill.body.trim()),
     "</skill>",
   ].join("\n");
 }
@@ -371,4 +390,11 @@ function escapeXml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function escapeMarkdownInline(value: string): string {
+  return value
+    .replaceAll(/\s+/gu, " ")
+    .trim()
+    .replaceAll(/([\\`*_[\]{}<>#|])/gu, "\\$1");
 }

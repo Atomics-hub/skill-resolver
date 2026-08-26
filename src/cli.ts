@@ -12,7 +12,7 @@ import {
 } from "./index.js";
 import type { ResolveSkillsOptions, SkillProfileName } from "./types.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const PROFILE_NAMES = new Set([
   "claude",
   "codex",
@@ -163,8 +163,20 @@ function parseArguments(argv: readonly string[]): {
       options.unknownFields = policy;
     } else if (argument === "--max-depth")
       options.maxDepth = number(next(argv, ++index, argument), argument, true);
+    else if (argument === "--max-skills")
+      options.maxSkills = number(
+        next(argv, ++index, argument),
+        argument,
+        false,
+      );
     else if (argument === "--max-skill-bytes")
       options.maxSkillBytes = number(
+        next(argv, ++index, argument),
+        argument,
+        false,
+      );
+    else if (argument === "--max-total-skill-bytes")
+      options.maxTotalSkillBytes = number(
         next(argv, ++index, argument),
         argument,
         false,
@@ -218,7 +230,7 @@ function required(value: string | undefined, message: string): string {
 }
 
 function help(): string {
-  return `skill-resolver ${VERSION}\n\nDiscover, validate, resolve, and safely load Agent Skills.\n\nUsage:\n  skill-resolver [list] [options]\n  skill-resolver show <name> [options]\n  skill-resolver read <name> <resource> [options]\n  skill-resolver lint [--strict] [options]\n  skill-resolver explain [options]\n\nOptions:\n  --profile <name>         claude, codex, copilot, cursor, gemini, universal\n  --cwd <path>             Starting directory\n  --root <path>            Project root override\n  --location <path>        Extra skill location (repeatable; highest priority)\n  --global                 Include profile global locations\n  --follow-symlinks        Follow links only when they stay inside allowed roots\n  --max-depth <number>     Discovery depth (default: 2)\n  --max-skill-bytes <n>    Maximum SKILL.md/resource bytes (default: 1048576)\n  --max-body-lines <n>     Recommended body limit (default: 500)\n  --unknown-fields <mode>  ignore, warn, error (default: warn)\n  --format <format>        xml or markdown for list output\n  --json                   Machine-readable output\n  --strict                 Treat warnings as lint failures\n  -h, --help               Show help\n  -v, --version            Show version\n`;
+  return `skill-resolver ${VERSION}\n\nDiscover, validate, resolve, and safely load Agent Skills.\n\nUsage:\n  skill-resolver [list] [options]\n  skill-resolver show <name> [options]\n  skill-resolver read <name> <resource> [options]\n  skill-resolver lint [--strict] [options]\n  skill-resolver explain [options]\n\nOptions:\n  --profile <name>         claude, codex, copilot, cursor, gemini, universal\n  --cwd <path>             Starting directory\n  --root <path>            Project root override\n  --location <path>        Extra skill location (repeatable; highest priority)\n  --global                 Include profile global locations\n  --follow-symlinks        Follow links only when they stay inside allowed roots\n  --max-depth <number>     Discovery depth (default: 2)\n  --max-skills <number>    Maximum discovered skills (default: 10000)\n  --max-skill-bytes <n>    Maximum SKILL.md/resource bytes (default: 1048576)\n  --max-total-skill-bytes <n>  Aggregate SKILL.md bytes (default: 26214400)\n  --max-body-lines <n>     Recommended body limit (default: 500)\n  --unknown-fields <mode>  ignore, warn, error (default: warn)\n  --format <format>        xml or markdown for list output\n  --json                   Machine-readable output\n  --strict                 Treat warnings as lint failures\n  -h, --help               Show help\n  -v, --version            Show version\n`;
 }
 
 class CliError extends Error {}

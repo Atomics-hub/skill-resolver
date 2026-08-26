@@ -25,7 +25,9 @@ import type {
 } from "./types.js";
 
 const DEFAULT_MAX_DEPTH = 2;
+const DEFAULT_MAX_SKILLS = 10_000;
 const DEFAULT_MAX_SKILL_BYTES = 1024 * 1024;
+const DEFAULT_MAX_TOTAL_SKILL_BYTES = 25 * 1024 * 1024;
 
 interface NormalizedOptions {
   cwd: string;
@@ -34,7 +36,9 @@ interface NormalizedOptions {
   locations: readonly SkillLocation[];
   followSymlinks: boolean;
   maxDepth: number;
+  maxSkills: number;
   maxSkillBytes: number;
+  maxTotalSkillBytes: number;
   maxBodyLines: number;
   unknownFields: "ignore" | "warn" | "error";
   allowedRoots: readonly string[];
@@ -67,18 +71,21 @@ export async function resolveSkills(
   const omitted: OmittedSkill[] = [];
   const candidates = await discover(normalized, issues);
   const loaded: ResolvedSkill[] = [];
+  let totalSkillBytes = 0;
 
   for (const candidate of candidates) {
-    const content = await readSkillFile(
+    const loadedFile = await readSkillFile(
       candidate.skillFile,
       normalized,
       issues,
+      normalized.maxTotalSkillBytes - totalSkillBytes,
     );
-    if (content === null) {
+    if (loadedFile === null) {
       omitted.push({ ...candidate, reason: "unsafe", issues: [] });
       continue;
     }
-    const parsed = parseSkillContent(content, {
+    totalSkillBytes += loadedFile.bytes;
+    const parsed = parseSkillContent(loadedFile.content, {
       path: candidate.skillFile,
       expectedName: basename(candidate.directory),
       maxBodyLines: normalized.maxBodyLines,
@@ -235,9 +242,17 @@ async function normalizeOptions(
       options.maxDepth ?? DEFAULT_MAX_DEPTH,
       "maxDepth",
     ),
+    maxSkills: positiveInteger(
+      options.maxSkills ?? DEFAULT_MAX_SKILLS,
+      "maxSkills",
+    ),
     maxSkillBytes: positiveInteger(
       options.maxSkillBytes ?? DEFAULT_MAX_SKILL_BYTES,
       "maxSkillBytes",
+    ),
+    maxTotalSkillBytes: positiveInteger(
+      options.maxTotalSkillBytes ?? DEFAULT_MAX_TOTAL_SKILL_BYTES,
+      "maxTotalSkillBytes",
     ),
     maxBodyLines: positiveInteger(options.maxBodyLines ?? 500, "maxBodyLines"),
     unknownFields,
@@ -272,6 +287,7 @@ async function walkLocation(
   const queue: Array<{ path: string; depth: number }> = [
     { path: location.path, depth: 0 },
   ];
+  const visited = new Set<string>();
   while (queue.length > 0) {
     const current = queue.shift();
     if (current === undefined) continue;
@@ -299,10 +315,21 @@ async function walkLocation(
         continue;
       }
     }
+    const canonicalCurrent = await canonicalPath(current.path);
+    if (visited.has(canonicalCurrent)) continue;
+    visited.add(canonicalCurrent);
     const skillFile = join(current.path, "SKILL.md");
     if (await exists(skillFile)) {
-      const key = await canonicalPath(current.path);
-      output.set(key, { ...location, directory: current.path, skillFile });
+      if (!output.has(canonicalCurrent) && output.size >= options.maxSkills) {
+        throw new RangeError(
+          `Skill discovery exceeds maxSkills (${options.maxSkills})`,
+        );
+      }
+      output.set(canonicalCurrent, {
+        ...location,
+        directory: current.path,
+        skillFile,
+      });
       continue;
     }
     if (current.depth >= options.maxDepth) continue;
@@ -334,7 +361,8 @@ async function readSkillFile(
   path: string,
   options: NormalizedOptions,
   issues: SkillIssue[],
-): Promise<string | null> {
+  remainingBytes: number,
+): Promise<{ content: string; bytes: number } | null> {
   try {
     const linkMetadata = await lstat(path);
     let readPath = path;
@@ -371,8 +399,18 @@ async function readSkillFile(
       });
       return null;
     }
+    if (fileMetadata.size > remainingBytes) {
+      issues.push({
+        code: "resource-limit",
+        severity: "error",
+        message: `Reading ${path} would exceed maxTotalSkillBytes`,
+        path,
+      });
+      return null;
+    }
     const content = await readFile(readPath, "utf8");
-    if (Buffer.byteLength(content, "utf8") > options.maxSkillBytes) {
+    const bytes = Buffer.byteLength(content, "utf8");
+    if (bytes > options.maxSkillBytes) {
       issues.push({
         code: "file-too-large",
         severity: "error",
@@ -381,7 +419,16 @@ async function readSkillFile(
       });
       return null;
     }
-    return content;
+    if (bytes > remainingBytes) {
+      issues.push({
+        code: "resource-limit",
+        severity: "error",
+        message: `${path} grew beyond maxTotalSkillBytes while reading`,
+        path,
+      });
+      return null;
+    }
+    return { content, bytes };
   } catch (error) {
     issues.push({
       code: "read-failed",

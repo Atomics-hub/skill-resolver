@@ -11,9 +11,9 @@ Treat every skill directory as untrusted input.
 - Followed discovery links must resolve within a configured discovery location.
 - Followed resource links must resolve within the selected skill directory.
 - Resource paths must be relative and cannot contain NUL bytes or escape with `..`.
-- `SKILL.md`, individual resources, resource counts, and aggregate resource bytes are bounded.
+- `SKILL.md` size, candidate count, aggregate skill bytes, individual resources, resource counts, and aggregate resource bytes are bounded.
 - YAML duplicate keys, merge keys, and excessive aliases are rejected.
-- Resource-directory cycles are canonicalized and visited once.
+- Discovery and resource-directory cycles are canonicalized and visited once.
 
 These controls reduce accidental data disclosure and denial-of-service risk. They do not make skill prose trustworthy. A host must decide whether and how a model may act on returned content.
 

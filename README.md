@@ -88,7 +88,9 @@ const result = await resolveSkills({
   includeGlobal: false,
   followSymlinks: false,
   maxDepth: 2,
+  maxSkills: 10_000,
   maxSkillBytes: 1_048_576,
+  maxTotalSkillBytes: 26_214_400,
   maxBodyLines: 500,
   unknownFields: "warn",
 });

@@ -187,7 +187,44 @@ describe("resolution", () => {
       resolveSkills({ root: project, maxSkillBytes: 0 }),
     ).rejects.toThrow(TypeError);
     await expect(
+      resolveSkills({ root: project, maxSkills: 0 }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      resolveSkills({ root: project, maxTotalSkillBytes: 0 }),
+    ).rejects.toThrow(TypeError);
+    await expect(
       resolveSkills({ root: project, unknownFields: "wat" as "warn" }),
     ).rejects.toThrow(TypeError);
+  });
+
+  it("bounds candidate counts and aggregate SKILL.md bytes", async () => {
+    const project = await root();
+    await write(join(project, "skills", "one", "SKILL.md"), skill("one"));
+    await write(join(project, "skills", "two", "SKILL.md"), skill("two"));
+    await expect(
+      resolveSkills({ root: project, maxSkills: 1 }),
+    ).rejects.toThrow("maxSkills");
+
+    const budgeted = await resolveSkills({
+      root: project,
+      maxTotalSkillBytes: 60,
+    });
+    expect(budgeted.skills.length).toBeLessThan(2);
+    expect(
+      budgeted.issues.some((issue) => issue.code === "resource-limit"),
+    ).toBe(true);
+  });
+
+  it("visits cyclic discovery links once", async () => {
+    const project = await root();
+    await mkdir(join(project, "skills", "empty"), { recursive: true });
+    await symlink("..", join(project, "skills", "empty", "cycle"));
+    await write(join(project, "skills", "safe", "SKILL.md"), skill("safe"));
+    const result = await resolveSkills({
+      root: project,
+      followSymlinks: true,
+      maxDepth: 1_000,
+    });
+    expect(result.skills.map((entry) => entry.metadata.name)).toEqual(["safe"]);
   });
 });

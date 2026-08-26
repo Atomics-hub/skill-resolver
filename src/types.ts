@@ -102,7 +102,9 @@ export interface ResolveSkillsOptions {
   globalLocations?: readonly string[];
   followSymlinks?: boolean;
   maxDepth?: number;
+  maxSkills?: number;
   maxSkillBytes?: number;
+  maxTotalSkillBytes?: number;
   maxBodyLines?: number;
   unknownFields?: "ignore" | "warn" | "error";
 }
